@@ -1,489 +1,1368 @@
-/* Clima de Aula — lógica de la app (Firebase Realtime Database) */
-(function(){
-  const PREGUNTAS = [
-    {id:'p1', txt:'Me siento a gusto en esta clase / con el ambiente del grupo.'},
-    {id:'p2', txt:'Existe un trato respetuoso entre los miembros del grupo.'},
-    {id:'p3', txt:'Puedo participar u opinar sin miedo a burlas o juicios.'},
-    {id:'p4', txt:'Sé a quién puedo acudir si tengo un problema.'},
-    {id:'p5', txt:'Creo que hay buen clima de convivencia en este grupo.'},
-    {id:'p6', txt:'Me siento seguro/a en los espacios comunes (patio, pasillos, redes).'},
-  ];
-  const P7 = {id:'p7', txt:'Hay algún compañero/a al que veo solo/a con frecuencia, o creo que lo pasa mal (presencial o por redes) y nadie se entera.'};
-
-  const params = new URLSearchParams(location.search);
-  const esAlumno = params.get('alumno') === '1';
-
-  function toast(msg){
-    const t = document.getElementById('toast');
-    if(!t) return;
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(()=>t.classList.remove('show'), 2200);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sociograma de centro</title>
+<style>
+  :root{
+    --paper:#F6F4EE;
+    --panel:#FFFFFF;
+    --ink:#22314F;
+    --ink-soft:#5A6785;
+    --line:#DEDACB;
+    --gold:#C89B3C;
+    --gold-soft:#F1E4C3;
+    --sage:#5B8266;
+    --sage-soft:#E1EBE2;
+    --clay:#B5533C;
+    --clay-soft:#F4E1DA;
+    --radius:10px;
   }
-  function avg(arr){ arr = arr.filter(v=>v!=null && !isNaN(v)); return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
-  function fmt(n){ return (n===null||n===undefined) ? '—' : n.toFixed(2); }
-  function badgeFor(m){
-    if(m===null) return '<span class="badge">Sin datos</span>';
-    if(m>=4) return '<span class="badge ok">Clima positivo</span>';
-    if(m>=3) return '<span class="badge warn">Zona de atención</span>';
-    return '<span class="badge alert">Alarma</span>';
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;
+    line-height:1.5;
   }
-  function avgRonda(ronda){
-    const resp = ronda.respuestas ? Object.values(ronda.respuestas) : [];
-    const medias = {};
-    PREGUNTAS.forEach(p=> medias[p.id] = avg(resp.map(r=>r[p.id])) );
-    medias.p7 = avg(resp.map(r=>r.p7));
-    medias._n = resp.length;
-    return medias;
+  header.top{
+    background:var(--ink);
+    color:#fff;
+    padding:18px 22px 0 22px;
   }
+  header.top h1{
+    margin:0 0 4px 0;
+    font-family:Georgia,"Iowan Old Style",serif;
+    font-size:22px;
+    font-weight:600;
+    letter-spacing:0.2px;
+  }
+  header.top p.sub{
+    margin:0 0 14px 0;
+    color:#C7CEE0;
+    font-size:13px;
+  }
+  nav.tabs{
+    display:flex;
+    gap:4px;
+    flex-wrap:wrap;
+  }
+  nav.tabs button{
+    background:transparent;
+    border:none;
+    color:#C7CEE0;
+    padding:10px 14px;
+    font-size:13.5px;
+    cursor:pointer;
+    border-radius:8px 8px 0 0;
+    font-family:inherit;
+  }
+  nav.tabs button.active{
+    background:var(--paper);
+    color:var(--ink);
+    font-weight:600;
+  }
+  main{
+    max-width:1080px;
+    margin:0 auto;
+    padding:22px 20px 60px 20px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:18px;
+  }
+  h2{
+    font-family:Georgia,"Iowan Old Style",serif;
+    font-size:19px;
+    margin:0 0 12px 0;
+    color:var(--ink);
+  }
+  h3{
+    font-size:15.5px;
+    margin:18px 0 8px 0;
+    color:var(--ink);
+  }
+  p{margin:0 0 10px 0;}
+  .muted{color:var(--ink-soft); font-size:13px;}
+  .badge{
+    display:inline-block;
+    font-size:11.5px;
+    font-weight:600;
+    padding:2px 8px;
+    border-radius:20px;
+    background:var(--sage-soft);
+    color:var(--sage);
+    margin-left:6px;
+  }
+  .badge.gold{background:var(--gold-soft); color:#8a6a1e;}
+  .badge.clay{background:var(--clay-soft); color:var(--clay);}
+  label{display:block; font-size:13px; font-weight:600; margin:12px 0 4px 0; color:var(--ink);}
+  input[type=text], input[type=number], select, textarea{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:7px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fff;
+    color:var(--ink);
+  }
+  textarea{min-height:70px; resize:vertical;}
+  .row{display:flex; gap:12px; flex-wrap:wrap;}
+  .row > div{flex:1; min-width:160px;}
+  button.btn{
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:10px 16px;
+    border-radius:7px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  button.btn:hover{opacity:0.92;}
+  button.btn.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--line);
+  }
+  button.btn.danger{
+    background:var(--clay-soft);
+    color:var(--clay);
+    border:none;
+  }
+  button.btn.small{padding:6px 10px; font-size:12.5px;}
+  .pick-list{
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 10px;
+    max-height:230px;
+    overflow-y:auto;
+    background:#FCFBF8;
+  }
+  .pick-list label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-weight:400;
+    font-size:14px;
+    margin:6px 0;
+    color:var(--ink);
+  }
+  .pick-list input{width:auto;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{
+    text-align:left;
+    padding:8px 9px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  th{color:var(--ink-soft); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.3px;}
+  tr:hover td{background:#FBF9F3;}
+  .empty{
+    text-align:center;
+    padding:30px 10px;
+    color:var(--ink-soft);
+    font-size:14px;
+  }
+  .group-card{
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    background:#FCFBF8;
+  }
+  .group-card .head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .disclaimer{
+    background:#FCF7EA;
+    border:1px solid var(--gold-soft);
+    border-radius:8px;
+    padding:12px 14px;
+    font-size:12.5px;
+    color:#6B5622;
+    margin-top:16px;
+  }
+  .gate{
+    text-align:center;
+    padding:50px 20px;
+  }
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px;
+    margin:14px 0;
+  }
+  .stat-box{
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    background:#FCFBF8;
+  }
+  .stat-box .n{font-size:20px; font-weight:700; color:var(--ink);}
+  .stat-box .lbl{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.3px;}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); margin-top:8px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:14px; height:3px; display:inline-block;}
+  .dot{width:12px; height:12px; border-radius:50%; display:inline-block;}
+  svg text{font-family:inherit;}
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;}
+  ul.tight{margin:6px 0; padding-left:18px;}
+  ul.tight li{margin-bottom:4px; font-size:13.5px;}
+  .checkline{display:flex; align-items:center; gap:8px; font-weight:400; margin:8px 0;}
+  .checkline input{width:auto;}
+  .toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:8px;
+    font-size:13.5px; z-index:50; box-shadow:0 4px 16px rgba(0,0,0,0.2);
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Sociograma de centro</h1>
+  <p class="sub">Análisis de relaciones interpersonales y convivencia — de 1.º de ESO a 2.º de Bachillerato</p>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+<main id="app"></main>
 
-  /* ================= MODO ALUMNO ================= */
-  if(esAlumno){
-    document.getElementById('alumnoWrap').style.display = 'block';
-    const wrap = document.getElementById('alumnoWrap');
-    let step = 0; // 0 curso, 1 grupo, 2 ronda, 3 alumno, 4 preguntas, 5 gracias
-    let sel = {curso:null, grupo:null, rondaId:null, ronda:null, alumnoId:null};
-    let respuestas = {};
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script>
+/* ============ FIREBASE ============ */
+// Sustituye estos valores por los de TU proyecto de Firebase (Configuración del proyecto > Tus apps > SDK setup).
+const firebaseConfig = {
+  apiKey: "AIzaSyBcBknBLQTsLzLciE_2uXEPSbgU0A43bbM",
+  authDomain: "sociograma-triana.firebaseapp.com",
+  databaseURL: "https://sociograma-triana-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "sociograma-triana",
+  storageBucket: "sociograma-triana.firebasestorage.app",
+  messagingSenderId: "646919164665",
+  appId: "1:646919164665:web:32b71b76ca179117f2c828"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth();
+</script>
+<script>
+/* ============ CONFIG ============ */
+const CURSOS = ["1º ESO","2º ESO","3º ESO","4º ESO","1º Bachillerato","2º Bachillerato"];
+const Q1_LABEL = {
+  ESO: "¿Con qué compañeros o compañeras de tu clase te gustaría trabajar en grupo? (elige entre 1 y 3)",
+  BACH: "¿Con qué compañeros o compañeras preferirías trabajar en un proyecto de clase? (elige entre 1 y 3)"
+};
+const Q2_LABEL = {
+  ESO: "¿Con qué compañeros o compañeras preferirías hacer una excursión o actividad de convivencia? (elige entre 1 y 3)",
+  BACH: "¿Con qué compañeros o compañeras preferirías compartir una actividad fuera del aula? (elige entre 1 y 3)"
+};
+const Q3_LABEL = {
+  ESO: "Si tuvieras un problema personal o académico, ¿a qué compañero o compañera acudirías?",
+  BACH: "¿En qué compañero o compañera confiarías si tuvieras un problema personal o académico?"
+};
+const Q4_LABEL = {
+  ESO: "¿Qué compañero o compañera crees que ayuda más a los demás?",
+  BACH: "¿Qué compañero o compañera consideras más dispuesto a ayudar a los demás?"
+};
+const Q5_LABEL = {
+  ESO: "¿Quién suele influir positivamente en el grupo?",
+  BACH: "¿Quién dirías que tiene más influencia positiva sobre el grupo?"
+};
+const Q6_LABEL = {
+  ESO: "¿Con qué compañero o compañera te resulta más difícil trabajar? (opcional, máximo 2)",
+  BACH: "¿Con qué compañero o compañera te resulta más difícil trabajar? (opcional, máximo 2)"
+};
+const Q7_LABEL = {
+  ESO: "¿Crees que algún compañero o compañera está solo/a o poco integrado/a? (opcional, máximo 2)",
+  BACH: "¿Consideras que alguien del grupo está poco integrado o participa poco? (opcional, máximo 2)"
+};
+const Q8_LABEL = {
+  ESO: "¿Con qué persona de la clase te gustaría relacionarte más?",
+  BACH: "¿Con qué persona de la clase te gustaría relacionarte más de lo que lo haces ahora?"
+};
 
-    db.ref('cursos').once('value').then(snap=>{
-      const data = snap.val() || {};
-      renderStep(data);
+/* ============ STORAGE (Firebase Realtime Database) ============ */
+function withTimeout(promise, ms){
+  return new Promise((resolve)=>{
+    let done = false;
+    const timer = setTimeout(()=>{ if(!done){ done=true; resolve({timedOut:true}); } }, ms);
+    Promise.resolve(promise).then((v)=>{
+      if(!done){ done=true; clearTimeout(timer); resolve({timedOut:false, value:v}); }
+    }).catch((err)=>{
+      if(!done){ done=true; clearTimeout(timer); resolve({timedOut:false, error:err}); }
     });
+  });
+}
+async function fbGet(path){
+  try{
+    if(!db){ showErrorBanner('Firebase no está inicializado. Revisa firebaseConfig.'); return null; }
+    const r = await withTimeout(db.ref(path).once('value'), 8000);
+    if(r.timedOut){ showErrorBanner('Firebase tardó demasiado en responder al leer "'+path+'".'); return null; }
+    if(r.error){ showErrorBanner('Error leyendo "'+path+'": ' + r.error.message); return null; }
+    return r.value.exists() ? r.value.val() : null;
+  }catch(e){ showErrorBanner('Error leyendo "'+path+'": ' + e.message); return null; }
+}
+async function fbSet(path, value){
+  try{
+    if(!db){ showErrorBanner('Firebase no está inicializado. Revisa firebaseConfig.'); return false; }
+    const r = await withTimeout(db.ref(path).set(value), 8000);
+    if(r.timedOut){ showErrorBanner('Firebase tardó demasiado en guardar "'+path+'". Vuelve a intentarlo.'); return false; }
+    if(r.error){ showErrorBanner('Error guardando "'+path+'": ' + r.error.message); return false; }
+    return true;
+  }catch(e){ showErrorBanner('Error guardando "'+path+'": ' + e.message); return false; }
+}
+async function fbRemove(path){
+  try{
+    if(!db) return false;
+    await db.ref(path).remove();
+    return true;
+  }catch(e){ showErrorBanner('Error eliminando "'+path+'": ' + e.message); return false; }
+}
+async function loadConfig(){
+  const val = await fbGet('config');
+  return val || {groups:[]};
+}
+async function saveConfig(cfg){ return fbSet('config', cfg); }
+async function loadResponses(groupId){
+  // Devuelve un array de respuestas a partir del objeto {codigoAlumno: respuesta} de Firebase.
+  const val = await fbGet('responses/'+groupId);
+  return val ? Object.values(val) : [];
+}
+async function saveOneResponse(groupId, studentCode, responseObj){
+  return fbSet('responses/'+groupId+'/'+studentCode, responseObj);
+}
 
-    function progreso(){
-      const total = 5;
-      return `<div class="progressBar"><div class="fill" style="width:${(step/total)*100}%"></div></div>`;
-    }
+/* ============ STATE ============ */
+let state = {
+  tab: 'inicio',
+  config: {groups:[]},
+  teacherUnlocked: false,
+  form: { groupId:null, studentCode:null, q1:[], q2:[], q3:'', q4:'', q5:'', q6:[], q7:[], q7none:false, q8:'', q9:null, q10:'' },
+  formStep: 'select', // select -> answer -> done
+  responsesCache: {}, // groupId -> array
+  analysisGroupId: null,
+  loading: true,
+};
 
-    function renderStep(data){
-      if(step===0){
-        const cursos = Object.keys(data).sort();
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">Encuesta anónima — Salesianos Triana</div>${progreso()}
-        <div class="stepCard">
-          <label class="field">Elige tu curso académico</label>
-          ${cursos.map(c=>`<button class="bigChoice" data-c="${c}">${c}</button>`).join('') || '<div class="empty">No hay cursos configurados todavía. Pídele a tu profesor que lo prepare.</div>'}
-        </div>`;
-        wrap.querySelectorAll('[data-c]').forEach(b=> b.onclick = ()=>{ sel.curso=b.dataset.c; step=1; renderStep(data); });
-      }
-      else if(step===1){
-        const grupos = Object.keys(data[sel.curso]?.grupos||{}).sort();
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">${sel.curso}</div>${progreso()}
-        <div class="stepCard">
-          <label class="field">Elige tu grupo</label>
-          ${grupos.map(g=>`<button class="bigChoice" data-g="${g}">${data[sel.curso].grupos[g].nombre||g}</button>`).join('') || '<div class="empty">Este curso no tiene grupos todavía.</div>'}
-          <button class="btnGhost" style="margin-top:10px;" onclick="location.reload()">← Volver</button>
-        </div>`;
-        wrap.querySelectorAll('[data-g]').forEach(b=> b.onclick = ()=>{ sel.grupo=b.dataset.g; step=2; renderStep(data); });
-      }
-      else if(step===2){
-        const rondas = data[sel.curso].grupos[sel.grupo].rondas || {};
-        const activas = Object.entries(rondas).filter(([id,r])=>r.activa);
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">${data[sel.curso].grupos[sel.grupo].nombre}</div>${progreso()}
-        <div class="stepCard">
-          <label class="field">Encuesta disponible</label>
-          ${activas.map(([id,r])=>`<button class="bigChoice" data-r="${id}">${r.titulo}</button>`).join('') || '<div class="empty">No hay ninguna encuesta abierta para tu grupo ahora mismo. Pregúntale a tu profesor/a.</div>'}
-        </div>`;
-        wrap.querySelectorAll('[data-r]').forEach(b=> b.onclick = ()=>{
-          sel.rondaId=b.dataset.r; sel.ronda = rondas[sel.rondaId];
-          const recordado = localStorage.getItem(`climaAula_${sel.curso}_${sel.grupo}`);
-          const alumnos = data[sel.curso].grupos[sel.grupo].alumnos || {};
-          if(recordado){
-            const ru = JSON.parse(recordado);
-            if(alumnos[ru.id] === ru.nombre){ sel.alumnoId = ru.id; sel.recordadoNombre = ru.nombre; step = 3.5; renderStep(data); return; }
-          }
-          step=3; renderStep(data);
-        });
-      }
-      else if(step===3.5){
-        const ya = (sel.ronda.participantes)||{};
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">${sel.ronda.titulo}</div>${progreso()}
-        <div class="stepCard">
-          <label class="field">Este dispositivo está guardado como:</label>
-          <div style="font-family:'Fraunces',serif;font-size:1.3rem;margin:8px 0 18px;color:var(--azulejo-dark);">${sel.recordadoNombre} ${ya[sel.alumnoId]?' · ya respondida ✓':''}</div>
-          <button class="btnPrimary" style="width:100%;margin-top:0;" id="btnSoyYo">Sí, soy yo — continuar</button>
-          <button class="btnGhost" style="width:100%;margin-top:10px;" id="btnNoSoyYo">No soy yo, elegir otro nombre</button>
-        </div>`;
-        document.getElementById('btnSoyYo').onclick = ()=>{
-          db.ref(`cursos/${sel.curso}/grupos/${sel.grupo}/rondas/${sel.rondaId}/participantes/${sel.alumnoId}`).set(true);
-          step=4; renderStep(data);
-        };
-        document.getElementById('btnNoSoyYo').onclick = ()=>{
-          localStorage.removeItem(`climaAula_${sel.curso}_${sel.grupo}`);
-          step=3; renderStep(data);
-        };
-      }
-      else if(step===3){
-        const alumnos = data[sel.curso].grupos[sel.grupo].alumnos || {};
-        const ya = (sel.ronda.participantes)||{};
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">${sel.ronda.titulo} — Tu respuesta es anónima, solo se registra que has participado</div>${progreso()}
-        <div class="stepCard">
-          <label class="field">¿Quién eres? (esto no se une a tus respuestas)</label>
-          ${Object.entries(alumnos).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,nombre])=>`<button class="bigChoice" data-a="${id}" ${ya[id]?'style="opacity:.45;"':''}>${nombre} ${ya[id]?' · ya respondida ✓':''}</button>`).join('') || '<div class="empty">Este grupo aún no tiene alumnado registrado.</div>'}
-        </div>`;
-        wrap.querySelectorAll('[data-a]').forEach(b=> b.onclick = ()=>{
-          sel.alumnoId=b.dataset.a;
-          localStorage.setItem(`climaAula_${sel.curso}_${sel.grupo}`, JSON.stringify({id:sel.alumnoId, nombre:alumnos[sel.alumnoId]}));
-          db.ref(`cursos/${sel.curso}/grupos/${sel.grupo}/rondas/${sel.rondaId}/participantes/${sel.alumnoId}`).set(true);
-          step=4; renderStep(data);
-        });
-      }
-      else if(step===4){
-        const qs = PREGUNTAS.map(p=>`
-          <div class="scaleQ">
-            <div class="qtext">${p.txt}</div>
-            <div class="scaleBtns" data-q="${p.id}">
-              ${[1,2,3,4,5].map(v=>`<button data-v="${v}">${v}</button>`).join('')}
-            </div>
-          </div>`).join('');
-        wrap.innerHTML = `<h1>Clima de Aula</h1><div class="subtitle">1 = nunca/nada de acuerdo · 5 = siempre/totalmente de acuerdo</div>${progreso()}
-        <div class="stepCard">
-          ${qs}
-          <div class="scaleQ discreta">
-            <div class="qtext">🔎 ${P7.txt}</div>
-            <div class="scaleBtns" data-q="p7">${[1,2,3,4,5].map(v=>`<button data-v="${v}">${v}</button>`).join('')}</div>
-          </div>
-          <label class="field">¿Algo que te gustaría contar o cambiar? (opcional)</label>
-          <textarea id="notasAlumno" placeholder="Escribe aquí si quieres..."></textarea>
-          <button class="btnPrimary" id="btnEnviar" disabled>Enviar encuesta</button>
-        </div>`;
-        wrap.querySelectorAll('.scaleBtns').forEach(box=>{
-          box.querySelectorAll('button').forEach(btn=>{
-            btn.onclick = ()=>{
-              respuestas[box.dataset.q] = parseInt(btn.dataset.v);
-              box.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
-              btn.classList.add('sel');
-              checkListo();
-            };
-          });
-        });
-        function checkListo(){
-          const okAll = PREGUNTAS.every(p=>respuestas[p.id]) && respuestas.p7;
-          document.getElementById('btnEnviar').disabled = !okAll;
-        }
-        document.getElementById('btnEnviar').onclick = ()=>{
-          const notas = document.getElementById('notasAlumno').value.trim();
-          const payload = {...respuestas, notas, ts: Date.now()};
-          db.ref(`cursos/${sel.curso}/grupos/${sel.grupo}/rondas/${sel.rondaId}/respuestas`).push(payload)
-            .then(()=>{ step=5; renderStep(data); });
-        };
-      }
-      else if(step===5){
-        wrap.innerHTML = `<h1>¡Gracias! 🙌</h1><div class="subtitle">Tu respuesta se ha enviado de forma anónima.</div>
-        <div class="stepCard"><p>Ya puedes cerrar esta página.</p></div>`;
-      }
-    }
-    return; // no seguir cargando el modo profesor
+function etapaOf(curso){ return curso.indexOf('Bachillerato')>=0 ? 'BACH' : 'ESO'; }
+function abbrevCurso(curso){
+  return curso.replace('º','').replace('Bachillerato','BACH').replace('ESO','ESO').replace(/\s+/g,'');
+}
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function esc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function avg(arr){ return arr.length? Math.round((arr.reduce((a,b)=>a+b,0)/arr.length)*100)/100 : 0; }
+function cursoIndex(curso){ return CURSOS.indexOf(curso); }
+
+function toast(msg){
+  const t = document.createElement('div');
+  t.className='toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+
+function showErrorBanner(msg){
+  let b = document.getElementById('errorBanner');
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'errorBanner';
+    b.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#B5533C; color:#fff; padding:12px 16px; font-size:13px; z-index:100; font-family:monospace; white-space:pre-wrap;';
+    document.body.prepend(b);
   }
+  b.textContent = '⚠ Error en la app (copia este texto y compártelo): ' + msg;
+}
+window.addEventListener('error', (e)=>{
+  showErrorBanner((e.message||'Error desconocido') + ' — línea ' + e.lineno);
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  showErrorBanner('Promesa rechazada: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
 
-  /* ================= MODO PROFESOR ================= */
-  document.getElementById('app').style.display = 'flex';
-  let data = {};
-  let curso=null, grupo=null, view='resumen';
-  let comparar = {curso:null, grupo:null};
-  let chartInstance = null;
+/* ============ INIT ============ */
+async function ensureAnonAuth(){
+  try{
+    if(auth.currentUser) return;
+    const r = await withTimeout(auth.signInAnonymously(), 8000);
+    if(r.timedOut){ showErrorBanner('El inicio de sesión anónimo tardó demasiado. Reintenta recargando la página.'); }
+    if(r.error){ showErrorBanner('No se pudo iniciar sesión: ' + r.error.message + ' — revisa que "Anónimo" esté activado en Firebase Authentication.'); }
+  }catch(e){
+    showErrorBanner('No se pudo iniciar sesión: ' + e.message);
+  }
+}
+async function init(){
+  await ensureAnonAuth();
+  try{
+    state.config = await loadConfig();
+  }catch(err){
+    showErrorBanner('No se pudo cargar la configuración: ' + err.message);
+    state.config = {groups:[]};
+  }
+  state.loading = false;
+  render();
+}
 
-  db.ref('cursos').on('value', snap=>{
-    data = snap.val() || {};
-    if(!curso || !data[curso]) curso = Object.keys(data).sort()[0] || null;
-    if(curso){
-      const gs = Object.keys(data[curso].grupos||{});
-      if(!grupo || !gs.includes(grupo)) grupo = gs.sort()[0] || null;
-    } else grupo = null;
-    render();
+/* ============ TABS ============ */
+const TABS = [
+  {id:'inicio', label:'Inicio'},
+  {id:'cuestionario', label:'Cuestionario del alumnado'},
+  {id:'config', label:'Configuración (profesorado)'},
+  {id:'analisis', label:'Análisis (profesorado)'},
+];
+
+function renderTabs(){
+  const nav = document.getElementById('tabs');
+  nav.innerHTML = TABS.map(t=>
+    `<button class="${state.tab===t.id?'active':''}" data-act="gotoTab" data-arg="${t.id}">${t.label}</button>`
+  ).join('') + (state.teacherUnlocked ? `<button data-act="teacherLogout" style="margin-left:auto; color:#F4C7B8;">Salir (profesorado)</button>` : '');
+}
+
+/* ============ RENDER ROOT ============ */
+function render(){
+  renderTabs();
+  const app = document.getElementById('app');
+  if(state.loading){ app.innerHTML = '<div class="empty">Cargando…</div>'; return; }
+  if(state.tab==='inicio') app.innerHTML = renderInicio();
+  else if(state.tab==='cuestionario') app.innerHTML = renderCuestionario();
+  else if(state.tab==='config') app.innerHTML = state.teacherUnlocked ? renderConfig() : renderGate('config');
+  else if(state.tab==='analisis') app.innerHTML = state.teacherUnlocked ? renderAnalisis() : renderGate('analisis');
+}
+
+/* ============ GATE ============ */
+function renderGate(){
+  return `
+  <div class="panel gate">
+    <h2>Acceso del profesorado</h2>
+    <p class="muted">Esta sección incluye datos sensibles de convivencia. Inicia sesión con tu cuenta de profesorado.</p>
+    <div style="max-width:280px; margin:14px auto; text-align:left;">
+      <label>Correo</label>
+      <input type="text" id="teacherEmail" placeholder="tu-correo@triana.salesianos.edu" value="${esc(state.lastEmail||'')}">
+      <label>Contraseña</label>
+      <input type="password" id="teacherPassword" placeholder="Contraseña">
+    </div>
+    <button class="btn" data-act="teacherLogin">Entrar</button>
+    <p class="muted" style="margin-top:12px; font-size:12px;">Tu usuario se crea desde la consola de Firebase (Authentication → Sign-in method → Email/contraseña), no desde aquí.</p>
+  </div>`;
+}
+
+/* ============ INICIO ============ */
+function renderInicio(){
+  return `
+  <div class="panel">
+    <h2>Qué es esta herramienta</h2>
+    <p>Esta app organiza un sociograma para varios grupos del centro (de 1.º de ESO a 2.º de Bachillerato). El alumnado responde un breve cuestionario de forma anónima entre compañeros de su propia clase, y el profesorado obtiene un análisis por grupo (elecciones, reciprocidad, subgrupos, sociograma visual) y una comparativa global entre cursos.</p>
+    <h3>Cómo funciona</h3>
+    <ul class="tight">
+      <li><strong>Configuración</strong> (profesorado): crea los grupos y da de alta al alumnado con nombre; la app genera un código anónimo para cada alumno/a.</li>
+      <li><strong>Cuestionario</strong> (alumnado): cada alumno/a elige su clase, se identifica con su código y responde a las preguntas sobre sus compañeros.</li>
+      <li><strong>Análisis</strong> (profesorado): resultados por grupo, sociograma visual y comparativa entre todos los cursos.</li>
+    </ul>
+  </div>
+  <div class="disclaimer">
+    <strong>Uso responsable de los datos.</strong> El sociograma refleja las relaciones del grupo en un momento concreto y no debe usarse como único instrumento de valoración. Los resultados deben contrastarse con la observación del profesorado, tutorías y otros instrumentos, y no demuestran por sí solos la existencia de acoso escolar. Trátalos de forma confidencial: no deben difundirse entre el alumnado ni las familias con datos identificativos. Los datos se guardan en Firebase; el acceso al panel de profesorado requiere iniciar sesión, y las reglas de la base de datos limitan quién puede leer las respuestas del alumnado.
+  </div>`;
+}
+
+/* ============ CUESTIONARIO (alumnado) ============ */
+function renderCuestionario(){
+  const groups = state.config.groups;
+  if(state.formStep==='done'){
+    return `<div class="panel">
+      <h2>¡Gracias!</h2>
+      <p>Tu respuesta se ha guardado correctamente.</p>
+      <button class="btn secondary" data-act="restartForm">Responder por otra persona</button>
+    </div>`;
+  }
+  if(state.formStep==='answer'){
+    return renderQuestionnaireForm();
+  }
+  // select step
+  if(groups.length===0){
+    return `<div class="panel"><p class="empty">Todavía no hay ningún grupo dado de alta. Pide a tu profesor o profesora que lo configure primero.</p></div>`;
+  }
+  const g = state.form.groupId ? groups.find(x=>x.id===state.form.groupId) : null;
+  return `
+  <div class="panel">
+    <h2>Antes de empezar</h2>
+    <p class="muted">Elige tu clase y después tu código de alumno/a. Tus respuestas sobre compañeros se guardan de forma anónima (por código, no por nombre) para el análisis.</p>
+    <label>Curso y grupo</label>
+    <select id="selGroup" data-act="onChangeGroup">
+      <option value="">— Selecciona tu clase —</option>
+      ${groups.map(gr=>`<option value="${gr.id}" ${state.form.groupId===gr.id?'selected':''}>${esc(gr.curso)} ${esc(gr.grupo)}</option>`).join('')}
+    </select>
+    ${g ? `
+    <label>¿Quién eres?</label>
+    <select id="selStudent" data-act="onChangeStudent">
+      <option value="">— Selecciona tu código —</option>
+      ${g.students.map(s=>`<option value="${s.code}" ${state.form.studentCode===s.code?'selected':''}>${esc(s.code)} — ${esc(s.name)}</option>`).join('')}
+    </select>
+    <p class="muted" style="margin-top:10px;">Si no ves tu nombre en la lista, avisa a tu profesor o profesora.</p>
+    <button class="btn" data-act="startQuestionnaire" ${state.form.studentCode?'':'disabled'}>Empezar cuestionario</button>
+    ` : ''}
+  </div>`;
+}
+
+function pickListHtml(name, students, excludeCode, max, selected){
+  const items = students.filter(s=>s.code!==excludeCode);
+  if(items.length===0) return `<p class="muted">No hay compañeros disponibles en esta clase.</p>`;
+  return `<div class="pick-list" data-picklist="${name}" data-max="${max}">
+    ${items.map(s=>`
+      <label>
+        <input type="checkbox" data-act="togglePick" data-arg="${name}|${s.code}" ${selected.indexOf(s.code)>=0?'checked':''}>
+        ${esc(s.code)} — ${esc(s.name)}
+      </label>`).join('')}
+  </div>
+  <p class="muted" style="margin-top:4px;">Seleccionadas: <span id="count_${name}">${selected.length}</span> / ${max}</p>`;
+}
+
+function singleSelectHtml(name, students, excludeCode, selected){
+  const items = students.filter(s=>s.code!==excludeCode);
+  return `<select data-act="setSingle" data-arg="${name}">
+    <option value="">— Elige a alguien —</option>
+    ${items.map(s=>`<option value="${s.code}" ${selected===s.code?'selected':''}>${esc(s.code)} — ${esc(s.name)}</option>`).join('')}
+  </select>`;
+}
+
+function renderQuestionnaireForm(){
+  const g = state.config.groups.find(x=>x.id===state.form.groupId);
+  if(!g) return `<div class="panel empty">Grupo no encontrado.</div>`;
+  const etapa = etapaOf(g.curso);
+  const f = state.form;
+  return `
+  <div class="panel">
+    <h2>${esc(g.curso)} ${esc(g.grupo)} — código ${esc(f.studentCode)}</h2>
+    <p class="muted">Responde con sinceridad. Nadie de tu clase verá lo que respondas; solo se usa para el análisis general del grupo.</p>
+
+    <h3>1. ${Q1_LABEL[etapa]}</h3>
+    ${pickListHtml('q1', g.students, f.studentCode, 3, f.q1)}
+
+    <h3>2. ${Q2_LABEL[etapa]}</h3>
+    ${pickListHtml('q2', g.students, f.studentCode, 3, f.q2)}
+
+    <h3>3. ${Q3_LABEL[etapa]}</h3>
+    ${singleSelectHtml('q3', g.students, f.studentCode, f.q3)}
+
+    <h3>4. ${Q4_LABEL[etapa]}</h3>
+    ${singleSelectHtml('q4', g.students, f.studentCode, f.q4)}
+
+    <h3>5. ${Q5_LABEL[etapa]}</h3>
+    ${singleSelectHtml('q5', g.students, f.studentCode, f.q5)}
+
+    <h3>6. ${Q6_LABEL[etapa]}</h3>
+    ${pickListHtml('q6', g.students, f.studentCode, 2, f.q6)}
+
+    <h3>7. ${Q7_LABEL[etapa]}</h3>
+    <div class="checkline">
+      <input type="checkbox" id="q7none" data-act="toggleNone" ${f.q7none?'checked':''}>
+      <label style="margin:0; font-weight:400;">No sabría decirlo / no creo que sea el caso</label>
+    </div>
+    ${f.q7none ? '' : pickListHtml('q7', g.students, f.studentCode, 2, f.q7)}
+
+    <h3>8. ${Q8_LABEL[etapa]}</h3>
+    ${singleSelectHtml('q8', g.students, f.studentCode, f.q8)}
+
+    <h3>9. Valora el ambiente de tu clase</h3>
+    <div class="row">
+      ${[1,2,3,4,5].map(n=>`
+        <label class="checkline" style="flex:1; justify-content:center; border:1px solid var(--line); border-radius:8px; padding:8px;">
+          <input type="radio" name="q9" data-act="setClima" data-arg="${n}" ${f.q9===n?'checked':''}>
+          ${n}
+        </label>`).join('')}
+    </div>
+    <p class="muted">1 = muy malo · 5 = muy bueno</p>
+
+    <h3>10. ¿Qué podría hacerse para mejorar la convivencia del grupo? (opcional)</h3>
+    <textarea id="q10text" data-act="setText" placeholder="Escribe aquí…">${esc(f.q10)}</textarea>
+
+    <div style="margin-top:18px; display:flex; gap:10px;">
+      <button class="btn secondary" data-act="cancelForm">Cancelar</button>
+      <button class="btn" data-act="submitQuestionnaire">Guardar mis respuestas</button>
+    </div>
+  </div>`;
+}
+
+/* ============ CONFIGURACIÓN (profesorado) ============ */
+function renderConfig(){
+  const groups = state.config.groups;
+  return `
+  <div class="panel">
+    <h2>Crear un nuevo grupo</h2>
+    <form data-form="addGroup">
+      <div class="row">
+        <div>
+          <label>Curso</label>
+          <select name="curso">${CURSOS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
+        </div>
+        <div>
+          <label>Grupo (letra)</label>
+          <input type="text" name="grupo" placeholder="A" maxlength="3">
+        </div>
+      </div>
+      <button class="btn" style="margin-top:14px;" type="submit">Crear grupo</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Grupos dados de alta (${groups.length})</h2>
+    ${groups.length===0 ? '<p class="empty">Todavía no has creado ningún grupo.</p>' : groups.map(g=>renderGroupCard(g)).join('')}
+  </div>`;
+}
+
+function renderGroupCard(g){
+  const confirmingThis = state.confirmingGroup === g.id;
+  return `
+  <div class="group-card">
+    <div class="head">
+      <div>
+        <strong>${esc(g.curso)} ${esc(g.grupo)}</strong>
+        <span class="badge">${g.students.length} alumnos/as</span>
+      </div>
+      ${confirmingThis ? `
+        <div style="display:flex; gap:6px; align-items:center;">
+          <span class="muted" style="font-size:12.5px;">¿Eliminar este grupo y su alumnado?</span>
+          <button class="btn danger small" data-act="confirmDeleteGroup" data-arg="${g.id}">Sí, eliminar</button>
+          <button class="btn secondary small" data-act="cancelDeleteGroup">Cancelar</button>
+        </div>
+      ` : `
+      <div style="display:flex; gap:6px;">
+        <button class="btn secondary small" data-act="toggleGroupOpen" data-arg="${g.id}">${state['open_'+g.id] ? 'Ocultar' : 'Gestionar alumnado'}</button>
+        <button class="btn danger small" data-act="deleteGroup" data-arg="${g.id}">Eliminar grupo</button>
+      </div>
+      `}
+    </div>
+    ${state['open_'+g.id] ? `
+      <div style="margin-top:12px;">
+        <label>Añadir alumnado (un nombre por línea)</label>
+        <textarea id="bulkNames_${g.id}" placeholder="María López&#10;Juan Pérez&#10;..."></textarea>
+        <button class="btn small" style="margin-top:8px;" data-act="addStudents" data-arg="${g.id}">Añadir</button>
+        <h3>Alumnado (${g.students.length})</h3>
+        ${g.students.length===0 ? '<p class="muted">Sin alumnado todavía.</p>' : `
+        <table>
+          <thead><tr><th>Código</th><th>Nombre</th><th></th></tr></thead>
+          <tbody>
+            ${g.students.map(s=>{
+              const key = g.id+'|'+s.code;
+              const confirmingThis = state.confirmingStudent === key;
+              return `<tr><td>${esc(s.code)}</td><td>${esc(s.name)}</td><td>${
+                confirmingThis
+                ? `<span class="muted" style="font-size:12px;">¿Seguro?</span> <button class="btn danger small" data-act="confirmDeleteStudent" data-arg="${key}">Sí</button> <button class="btn secondary small" data-act="cancelDeleteStudent">Cancelar</button>`
+                : `<button class="btn danger small" data-act="deleteStudent" data-arg="${key}">Quitar</button>`
+              }</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>`}
+      </div>
+    ` : ''}
+  </div>`;
+}
+
+/* ============ ANÁLISIS (profesorado) ============ */
+function renderAnalisis(){
+  const groups = state.config.groups;
+  if(groups.length===0) return `<div class="panel"><p class="empty">Crea primero algún grupo en Configuración.</p></div>`;
+
+  let html = `<div class="panel">
+    <h2>Vista</h2>
+    <div class="toolbar">
+      <select id="analysisGroupSelect" data-act="setAnalysisGroup">
+        <option value="__global__" ${state.analysisGroupId==='__global__'||!state.analysisGroupId?'selected':''}>Comparativa global (todos los grupos)</option>
+        ${groups.map(g=>`<option value="${g.id}" ${state.analysisGroupId===g.id?'selected':''}>${esc(g.curso)} ${esc(g.grupo)}</option>`).join('')}
+      </select>
+      <button class="btn secondary small" data-act="refreshAnalysis">Actualizar datos</button>
+      <button class="btn secondary small" data-act="exportAllCsv">Exportar CSV (todo)</button>
+    </div>
+  </div>`;
+
+  const gid = state.analysisGroupId;
+  if(!gid || gid==='__global__'){
+    html += renderGlobalComparison();
+  } else {
+    const g = groups.find(x=>x.id===gid);
+    if(g) html += renderGroupAnalysis(g);
+  }
+  return html;
+}
+
+function computeGroupStats(group, responses){
+  const students = group.students;
+  const stats = {};
+  students.forEach(s=> stats[s.code] = {code:s.code, name:s.name, positivas:0, negativas:0, confianza:0, ayuda:0, lider:0, aislamiento:0, emitidas:0, reciprocas:0});
+  let climaSum=0, climaCount=0;
+  const posEdges = new Set();
+  const negEdges = new Set();
+
+  responses.forEach(r=>{
+    const emitter = r.studentCode;
+    if(!stats[emitter]) return;
+    let emitCount=0;
+    (r.q1||[]).forEach(c=>{ if(stats[c]){ stats[c].positivas++; posEdges.add(emitter+'|'+c); emitCount++; } });
+    (r.q2||[]).forEach(c=>{ if(stats[c]){ stats[c].positivas++; posEdges.add(emitter+'|'+c); emitCount++; } });
+    if(r.q3 && stats[r.q3]){ stats[r.q3].confianza++; emitCount++; }
+    if(r.q4 && stats[r.q4]){ stats[r.q4].ayuda++; emitCount++; }
+    if(r.q5 && stats[r.q5]){ stats[r.q5].lider++; emitCount++; }
+    (r.q6||[]).forEach(c=>{ if(stats[c]){ stats[c].negativas++; negEdges.add(emitter+'|'+c); emitCount++; } });
+    (r.q7||[]).forEach(c=>{ if(stats[c]){ stats[c].aislamiento++; } });
+    if(r.q8 && stats[r.q8]){ stats[r.q8].positivas++; posEdges.add(emitter+'|'+r.q8); emitCount++; }
+    if(typeof r.q9 === 'number'){ climaSum += r.q9; climaCount++; }
+    stats[emitter].emitidas += emitCount;
   });
 
-  function cursosList(){ return Object.keys(data).sort(); }
-  function gruposList(c){ return c && data[c] && data[c].grupos ? Object.keys(data[c].grupos).sort() : []; }
-  function gData(){ return (curso && grupo && data[curso] && data[curso].grupos && data[curso].grupos[grupo]) ? data[curso].grupos[grupo] : null; }
-  function gPath(){ return `cursos/${curso}/grupos/${grupo}`; }
+  const reciprocalPairs = [];
+  const seenPairs = new Set();
+  posEdges.forEach(edge=>{
+    const parts = edge.split('|'); const a=parts[0], b=parts[1];
+    const rev = b+'|'+a;
+    const key = [a,b].sort().join('|');
+    if(posEdges.has(rev) && !seenPairs.has(key)){
+      seenPairs.add(key);
+      reciprocalPairs.push([a,b]);
+    }
+  });
+  reciprocalPairs.forEach(pair=>{
+    if(stats[pair[0]]) stats[pair[0]].reciprocas++;
+    if(stats[pair[1]]) stats[pair[1]].reciprocas++;
+  });
 
-  function refreshSelectors(){
-    const selC = document.getElementById('selCurso');
-    const cursos = cursosList();
-    selC.innerHTML = cursos.map(c=>`<option value="${c}" ${c===curso?'selected':''}>${c}</option>`).join('') || '<option value="">— crea un curso —</option>';
-    const selG = document.getElementById('selGrupo');
-    const grupos = gruposList(curso);
-    selG.innerHTML = grupos.map(g=>`<option value="${g}" ${g===grupo?'selected':''}>${(data[curso].grupos[g].nombre)||g}</option>`).join('') || '<option value="">— crea un grupo —</option>';
+  const adjacency = {};
+  students.forEach(s=> adjacency[s.code]=new Set());
+  reciprocalPairs.forEach(pair=>{ adjacency[pair[0]].add(pair[1]); adjacency[pair[1]].add(pair[0]); });
+  const visited = new Set();
+  const components = [];
+  students.forEach(s=>{
+    if(visited.has(s.code)) return;
+    const stack=[s.code]; const comp=[];
+    visited.add(s.code);
+    while(stack.length){
+      const cur = stack.pop(); comp.push(cur);
+      adjacency[cur].forEach(n=>{ if(!visited.has(n)){ visited.add(n); stack.push(n); } });
+    }
+    components.push(comp);
+  });
+  const subgroups = components.filter(c=>c.length>=3);
+
+  const respondentCount = responses.length;
+  const participation = students.length ? Math.round((respondentCount/students.length)*1000)/10 : 0;
+  const avgPositivas = avg(students.map(s=>stats[s.code].positivas));
+  const avgNegativas = avg(students.map(s=>stats[s.code].negativas));
+  const avgClima = climaCount ? Math.round((climaSum/climaCount)*100)/100 : null;
+
+  const liderThreshold = Math.max(2, Math.ceil(respondentCount*0.2));
+  const leaders = students.filter(s=> respondentCount>0 && stats[s.code].lider >= liderThreshold)
+    .sort((a,b)=> stats[b.code].lider - stats[a.code].lider).map(s=>s.code);
+
+  const bajaIntegracion = respondentCount>0 ? students.filter(s=> stats[s.code].positivas<=1).map(s=>s.code) : [];
+
+  const rechazoThreshold = Math.max(2, Math.ceil(respondentCount*0.25));
+  const rechazoSignificativo = respondentCount>0 ? students.filter(s=> stats[s.code].negativas >= rechazoThreshold).map(s=>s.code) : [];
+
+  let puentes = [];
+  if(subgroups.length>=2){
+    const compOf = {};
+    subgroups.forEach((comp,i)=> comp.forEach(code=> compOf[code]=i));
+    students.forEach(s=>{
+      const reached = new Set();
+      posEdges.forEach(edge=>{
+        const parts = edge.split('|'); const a=parts[0], b=parts[1];
+        if(a===s.code && compOf[b]!==undefined) reached.add(compOf[b]);
+        if(b===s.code && compOf[a]!==undefined) reached.add(compOf[a]);
+      });
+      if(compOf[s.code]!==undefined) reached.delete(compOf[s.code]);
+      if(reached.size>=1) puentes.push(s.code);
+    });
+    puentes = Array.from(new Set(puentes));
   }
 
-  function viewResumen(){
-    const grupos = gruposList(curso);
-    if(!grupos.length) return `<h2>Resumen</h2><div class="subtitle">${curso||'Crea un curso académico'}</div><div class="empty">Aún no hay grupos en este curso.</div>`;
-    const cards = grupos.map(g=>{
-      const gd = data[curso].grupos[g];
-      const rondas = Object.entries(gd.rondas||{});
-      const nAlum = Object.keys(gd.alumnos||{}).length;
-      let mg = null, alertas = 0, ultima = null;
-      if(rondas.length){
-        rondas.sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
-        const last = rondas[rondas.length-1][1];
-        const m = avgRonda(last);
-        mg = avg(PREGUNTAS.map(p=>m[p.id]));
-        ultima = last;
-        alertas = rondas.filter(([id,r])=> (avgRonda(r).p7||0) >= 4).length;
-      }
-      return `<div class="statCard">
-        <div class="grupoName">${gd.nombre||g}</div>
-        <div class="num">${fmt(mg)}</div>
-        <div class="lbl">Media última encuesta</div>
-        ${badgeFor(mg)}
-        <div style="margin-top:8px;font-size:.78rem;color:var(--ink-soft);">${nAlum} alumnos · ${rondas.length} rondas</div>
-        ${ultima ? `<div style="font-size:.78rem;color:var(--ink-soft);">Participación: ${ultima.respuestas?Object.keys(ultima.respuestas).length:0}/${nAlum}</div>` : ''}
-        ${alertas>0?`<div style="margin-top:6px;font-size:.78rem;color:var(--coral);">⚠ ${alertas} ronda(s) con señal de aislamiento</div>`:''}
-      </div>`;
-    }).join('');
-    return `<h2>Resumen — ${curso}</h2><div class="subtitle">Vista rápida de todos los grupos</div><div class="cardGrid">${cards}</div>`;
+  const cohesionRatio = students.length ? Math.round((reciprocalPairs.length/students.length)*1000)/1000 : 0;
+  let cohesionLevel = 'sin datos';
+  if(respondentCount>0){
+    if(cohesionRatio>=0.4 && (avgClima===null || avgClima>=3.5)) cohesionLevel='alto';
+    else if(cohesionRatio<0.15 || (avgClima!==null && avgClima<2.8)) cohesionLevel='bajo';
+    else cohesionLevel='medio';
   }
 
-  function viewAlumnado(){
-    const d = gData();
-    if(!d) return `<h2>Alumnado</h2><div class="empty">Selecciona o crea un grupo primero.</div>`;
-    const alumnos = d.alumnos || {};
-    const rows = Object.entries(alumnos).sort((a,b)=>a[1].localeCompare(b[1]))
-      .map(([id,nombre])=>`<tr><td>${nombre}</td><td><button class="btnGhost btnDanger" onclick="climaApp.delAlumno('${id}')">Eliminar</button></td></tr>`).join('');
-    return `<h2>Alumnado — ${d.nombre}</h2>
-    <div class="subtitle">Gestión del grupo. Las respuestas de la encuesta no se vinculan a estos nombres.</div>
-    <div class="card">
-      <div class="row"><div><label class="field">Añadir alumno/a</label><input type="text" id="nuevoAlumno" placeholder="Nombre y apellidos"></div></div>
-      <button class="btnPrimary" onclick="climaApp.addAlumno()">Añadir</button>
+  return {stats, respondentCount, participation, avgPositivas, avgNegativas, avgClima, posEdges, negEdges, reciprocalPairs, subgroups, leaders, bajaIntegracion, rechazoSignificativo, puentes, cohesionLevel, cohesionRatio, liderThreshold, rechazoThreshold};
+}
+
+function renderGroupAnalysis(group){
+  const responses = state.responsesCache[group.id] || [];
+  const gs = computeGroupStats(group, responses);
+  const students = group.students;
+
+  const codeToName = {}; students.forEach(s=>codeToName[s.code]=s.name);
+
+  let html = `<div class="panel">
+    <h2>${esc(group.curso)} ${esc(group.grupo)}</h2>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="n">${students.length}</div><div class="lbl">Alumnado</div></div>
+      <div class="stat-box"><div class="n">${gs.participation}%</div><div class="lbl">Participación (${gs.respondentCount}/${students.length})</div></div>
+      <div class="stat-box"><div class="n">${gs.avgClima===null?'—':gs.avgClima}</div><div class="lbl">Clima medio (1–5)</div></div>
+      <div class="stat-box"><div class="n">${gs.reciprocalPairs.length}</div><div class="lbl">Relaciones recíprocas</div></div>
+      <div class="stat-box"><div class="n">${gs.avgPositivas}</div><div class="lbl">Media elecciones positivas</div></div>
+      <div class="stat-box"><div class="n">${gs.avgNegativas}</div><div class="lbl">Media elecciones negativas</div></div>
+      <div class="stat-box"><div class="n">${cohesionLabel(gs.cohesionLevel)}</div><div class="lbl">Cohesión grupal</div></div>
+      <div class="stat-box"><div class="n">${gs.subgroups.length}</div><div class="lbl">Subgrupos detectados</div></div>
     </div>
-    <div class="card">${Object.keys(alumnos).length ? `<table><tr><th>Nombre</th><th></th></tr>${rows}</table>` : '<div class="empty">Sin alumnado registrado todavía.</div>'}</div>`;
-  }
+    <p class="muted">Criterio de cohesión: proporción de vínculos positivos recíprocos respecto al tamaño del grupo (recíprocas / alumnado = ${gs.cohesionRatio}), combinado con el clima medio declarado. Alto ≥ 0,4 y clima ≥ 3,5 · Bajo &lt; 0,15 o clima &lt; 2,8 · Medio en el resto de casos.</p>
+    ${gs.respondentCount===0 ? '<p class="muted"><strong>Todavía no hay respuestas para este grupo.</strong></p>' : ''}
+  </div>`;
 
-  function viewRondas(){
-    const d = gData();
-    if(!d) return `<h2>Encuesta trimestral</h2><div class="empty">Selecciona o crea un grupo primero.</div>`;
-    const rondas = Object.entries(d.rondas||{}).sort((a,b)=>(b[1].fecha||'').localeCompare(a[1].fecha||''));
-    const nAlum = Object.keys(d.alumnos||{}).length;
-    const linkAlumno = `${location.origin}${location.pathname}?alumno=1`;
-    const rows = rondas.map(([id,r])=>{
-      const m = avgRonda(r);
-      const mg = avg(PREGUNTAS.map(p=>m[p.id]));
-      const nPart = Object.keys(r.participantes||{}).length;
-      return `<div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <div><b>${r.titulo}</b> <span class="pill ${r.activa?'activa':''}">${r.activa?'Abierta':'Cerrada'}</span></div>
-          <div style="display:flex;gap:8px;">
-            ${r.activa ? `<button class="btnGhost" onclick="climaApp.cerrarRonda('${id}')">Cerrar</button>` : `<button class="btnGhost" onclick="climaApp.abrirRonda('${id}')">Reabrir</button>`}
-            <button class="btnGhost btnDanger" onclick="climaApp.delRonda('${id}')">Eliminar</button>
-          </div>
-        </div>
-        <div class="subtitle" style="margin:8px 0;">Participación: ${nPart}/${nAlum} alumnos · ${m._n} respuestas recogidas</div>
-        <div class="row">
-          <div><div class="num" style="font-family:'IBM Plex Mono',monospace;font-size:1.4rem;">${fmt(mg)}</div><div class="lbl">Media global</div></div>
-          <div><div class="num" style="font-family:'IBM Plex Mono',monospace;font-size:1.4rem;color:${m.p7>=4?'var(--coral)':'inherit'};">${fmt(m.p7)}</div><div class="lbl">P.7 alerta</div></div>
-        </div>
-        ${badgeFor(mg)}
-      </div>`;
-    }).join('');
-    return `<h2>Encuesta trimestral — ${d.nombre}</h2>
-    <div class="subtitle">Crea una ronda por trimestre y compártela con tu alumnado</div>
-    <div class="card">
-      <label class="field">Nueva ronda (ej: Trimestre 1)</label>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="inputRonda" placeholder="Ej: Trimestre 1" style="max-width:260px;">
-        <button class="btnPrimary" style="margin:0;" onclick="climaApp.crearRonda()">Crear y abrir</button>
+  if(gs.respondentCount>0){
+    html += `<div class="panel">
+      <h2>Sociograma</h2>
+      ${renderSociogramSVG(group, gs)}
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--sage);"></span> Elección positiva</span>
+        <span><span class="swatch" style="background:var(--ink); height:4px;"></span> Elección recíproca</span>
+        <span><span class="swatch" style="background:var(--clay); border-top:2px dashed var(--clay); height:0;"></span> Elección negativa</span>
+        <span><span class="dot" style="background:var(--gold);"></span> Posible liderazgo positivo</span>
+        <span><span class="dot" style="background:#fff; border:2px dashed var(--ink-soft);"></span> Baja integración</span>
+        <span><span class="dot" style="background:#fff; border:2px solid var(--clay);"></span> Rechazo significativo</span>
       </div>
-      <div class="subtitle" style="margin-top:14px;margin-bottom:0;">Enlace para el alumnado (funciona para todos los grupos y rondas abiertas):</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-        <input type="text" id="linkAlumno" value="${linkAlumno}" readonly style="max-width:400px;">
-        <button class="btnGhost" onclick="climaApp.copiarLink()">Copiar enlace</button>
-      </div>
-    </div>
-    ${rows || '<div class="empty">Sin rondas todavía. Crea la primera arriba.</div>'}`;
-  }
+    </div>`;
 
-  function viewSemaforo(){
-    const d = gData();
-    if(!d) return `<h2>Semáforo semanal</h2><div class="empty">Selecciona o crea un grupo primero.</div>`;
-    const items = [{id:'relacion',txt:'Relación entre compañeros/as'},{id:'bienestar',txt:'Bienestar / seguridad'},{id:'participacion',txt:'Participación en clase'}];
-    const blocks = items.map(it=>`
-      <div style="margin-bottom:14px;">
-        <div class="qtext" style="margin-bottom:4px;">${it.txt}</div>
-        <div class="semaforoBtns" id="tile_${it.id}">
-          <div class="tile" data-val="verde" onclick="climaApp.setTile('${it.id}','verde')">🟢</div>
-          <div class="tile" data-val="amarillo" onclick="climaApp.setTile('${it.id}','amarillo')">🟡</div>
-          <div class="tile" data-val="rojo" onclick="climaApp.setTile('${it.id}','rojo')">🔴</div>
-        </div>
-      </div>`).join('');
-    const semaforos = Object.entries(d.semaforos||{}).sort((a,b)=>(b[1].fecha||'').localeCompare(a[1].fecha||''));
-    const semColor = {verde:'🟢',amarillo:'🟡',rojo:'🔴'};
-    const rows = semaforos.map(([id,s])=>`<tr><td>${s.fecha}</td><td>${semColor[s.relacion]||'—'}</td><td>${semColor[s.bienestar]||'—'}</td><td>${semColor[s.participacion]||'—'}</td><td><button class="btnGhost btnDanger" onclick="climaApp.delSemaforo('${id}')">Eliminar</button></td></tr>`).join('');
-    return `<h2>Semáforo semanal — ${d.nombre}</h2>
-    <div class="subtitle">Chequeo rápido del profesor, 1 minuto por semana</div>
-    <div class="card">
-      <label class="field">Fecha</label>
-      <input type="date" id="fechaSemaforo" value="${new Date().toISOString().slice(0,10)}" style="max-width:200px;">
-      ${blocks}
-      <button class="btnPrimary" onclick="climaApp.guardarSemaforo()">Guardar semáforo</button>
-    </div>
-    <div class="card"><b>Histórico</b>${semaforos.length?`<table><tr><th>Fecha</th><th>Relación</th><th>Bienestar</th><th>Participación</th><th></th></tr>${rows}</table>`:'<div class="empty">Sin registros todavía.</div>'}</div>`;
-  }
+    html += `<div class="panel">
+      <h3>Posibles líderes positivos</h3>
+      ${listOrNone(gs.leaders, codeToName, 'No se identifican liderazgos claros con los datos actuales.')}
+      <h3>Alumnado con posible baja integración</h3>
+      <p class="muted">Se recomienda contrastar esta información con la observación en el aula antes de sacar conclusiones.</p>
+      ${listOrNone(gs.bajaIntegracion, codeToName, 'No se detectan casos de baja integración con los datos actuales.')}
+      <h3>Posibles rechazos significativos</h3>
+      <p class="muted">Los datos sugieren revisar estos casos; no implican por sí solos ninguna situación de acoso.</p>
+      ${listOrNone(gs.rechazoSignificativo, codeToName, 'No se detectan casos de rechazo significativo con los datos actuales.')}
+      <h3>Alumnado puente entre subgrupos</h3>
+      ${listOrNone(gs.puentes, codeToName, 'No se identifican alumnos/as puente (o el grupo no muestra subgrupos diferenciados).')}
+      <h3>Subgrupos detectados</h3>
+      ${gs.subgroups.length===0 ? '<p class="muted">No se detectan subgrupos estables (de 3 o más) con los datos actuales.</p>' :
+        `<ul class="tight">${gs.subgroups.map((sg,i)=>`<li>Subgrupo ${i+1}: ${sg.map(c=>esc(c)+' ('+esc(codeToName[c]||'')+')').join(', ')}</li>`).join('')}</ul>`}
+    </div>`;
 
-  function viewEvolucion(){
-    const d = gData();
-    if(!d) return `<h2>Evolución</h2><div class="empty">Selecciona o crea un grupo primero.</div>`;
-    const rondas = Object.entries(d.rondas||{}).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
-    if(!rondas.length) return `<h2>Evolución — ${d.nombre}</h2><div class="empty">Necesitas al menos una ronda con respuestas para ver la evolución.</div>`;
-    return `<h2>Evolución — ${d.nombre}</h2>
-    <div class="subtitle">Media global y señal de alerta a lo largo de las rondas</div>
-    <div class="card"><canvas id="chartEvo" height="90"></canvas><div class="legend" id="chartLegend"></div></div>
-    <div class="card">
-      <b>Comparar con otro curso/grupo</b>
-      <div class="subtitle">Se alinean por número de ronda (1ª, 2ª, 3ª...)</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
-        <select class="formSel" id="selCompararCurso" style="max-width:220px;">
-          <option value="">— ninguno —</option>
-          ${cursosList().map(c=>`<option value="${c}" ${c===comparar.curso?'selected':''}>${c}${c===curso?' (este curso)':''}</option>`).join('')}
-        </select>
-        <select class="formSel" id="selCompararGrupo" style="max-width:220px;"><option value="">grupo…</option></select>
-        <button class="btnGhost" onclick="climaApp.quitarComparacion()">Quitar comparación</button>
-      </div>
-      <div id="compararMsg" style="margin-top:10px;font-size:.85rem;"></div>
+    html += `<div class="panel">
+      <h3>Detalle por alumno/a</h3>
+      <table>
+        <thead><tr><th>Código</th><th>Nombre</th><th>Positivas recib.</th><th>Negativas recib.</th><th>Recíprocas</th><th>Confianza</th><th>Ayuda</th><th>Liderazgo</th><th>Aislamiento (menciones)</th><th>Emitidas</th></tr></thead>
+        <tbody>
+          ${students.map(s=>{ const st=gs.stats[s.code]; return `<tr><td>${esc(s.code)}</td><td>${esc(s.name)}</td><td>${st.positivas}</td><td>${st.negativas}</td><td>${st.reciprocas}</td><td>${st.confianza}</td><td>${st.ayuda}</td><td>${st.lider}</td><td>${st.aislamiento}</td><td>${st.emitidas}</td></tr>`; }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+    html += `<div class="panel">
+      <h3>Ficha individual privada (solo profesorado)</h3>
+      <p class="muted">Pensada como apoyo para una conversación de tutoría, no para compartir con el alumnado ni las familias.</p>
+      <select id="studentReportSelect" data-act="setStudentReport">
+        <option value="">— Elegir alumno/a —</option>
+        ${students.map(s=>`<option value="${s.code}" ${state.studentReportCode===s.code?'selected':''}>${esc(s.code)} — ${esc(s.name)}</option>`).join('')}
+      </select>
+      ${state.studentReportCode ? renderStudentReport(group, gs) : ''}
     </div>`;
   }
 
-  function drawChart(){
-    const canvas = document.getElementById('chartEvo');
-    if(!canvas) return;
-    const d = gData();
-    const rondas = Object.entries(d.rondas||{}).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
-    const labels = rondas.map((r,i)=>`Ronda ${i+1}`);
-    const medias = rondas.map(([id,r])=>{ const m=avgRonda(r); return avg(PREGUNTAS.map(p=>m[p.id])); });
-    const p7 = rondas.map(([id,r])=> avgRonda(r).p7);
-    const datasets = [
-      {label:`${d.nombre} · Media global`, data:medias, borderColor:'#2B5876', backgroundColor:'#2B5876', tension:.25, spanGaps:true},
-      {label:`${d.nombre} · P.7 alerta`, data:p7, borderColor:'#B5533C', backgroundColor:'#B5533C', tension:.25, spanGaps:true, borderDash:[4,3]},
-    ];
-    let finalLabels = labels;
-    const msgBox = document.getElementById('compararMsg');
-    if(comparar.curso && comparar.grupo && data[comparar.curso] && data[comparar.curso].grupos[comparar.grupo]){
-      const cd = data[comparar.curso].grupos[comparar.grupo];
-      const cRondas = Object.entries(cd.rondas||{}).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
-      if(!cRondas.length){
-        if(msgBox) msgBox.innerHTML = `⚠️ <b>${cd.nombre}</b> (${comparar.curso}) todavía no tiene rondas con datos.`;
-      } else {
-        const cMedias = cRondas.map(([id,r])=>{ const m=avgRonda(r); return avg(PREGUNTAS.map(p=>m[p.id])); });
-        const cP7 = cRondas.map(([id,r])=> avgRonda(r).p7);
-        const maxLen = Math.max(labels.length, cMedias.length);
-        finalLabels = Array.from({length:maxLen},(_, i)=>`Ronda ${i+1}`);
-        datasets.push({label:`${cd.nombre} (${comparar.curso}) · Media global`, data:cMedias, borderColor:'#6E8B5A', backgroundColor:'#6E8B5A', tension:.25, spanGaps:true});
-        datasets.push({label:`${cd.nombre} (${comparar.curso}) · P.7 alerta`, data:cP7, borderColor:'#C98A2E', backgroundColor:'#C98A2E', tension:.25, spanGaps:true, borderDash:[4,3]});
-        if(msgBox) msgBox.innerHTML = `✅ Comparando con <b>${cd.nombre}</b> (${comparar.curso}) — ${cRondas.length} ronda(s).`;
-      }
-    } else if(msgBox){ msgBox.innerHTML = comparar.curso ? 'Elige también un grupo de ese curso.' : ''; }
+  html += renderDisclaimer();
+  return html;
+}
 
-    if(chartInstance) chartInstance.destroy();
-    chartInstance = new Chart(canvas.getContext('2d'), {
-      type:'line', data:{labels:finalLabels, datasets}, options:{scales:{y:{min:0,max:5}}, plugins:{legend:{display:false}}}
-    });
-    const legend = document.getElementById('chartLegend');
-    if(legend) legend.innerHTML = datasets.map(ds=>`<span><span class="dot" style="background:${ds.borderColor}"></span>${ds.label}</span>`).join('');
+function renderStudentReport(group, gs){
+  const code = state.studentReportCode;
+  const s = group.students.find(x=>x.code===code);
+  if(!s) return '';
+  const st = gs.stats[code];
+  const esLider = gs.leaders.indexOf(code)>=0;
+  const bajaIntegracion = gs.bajaIntegracion.indexOf(code)>=0;
+  const rechazoSignificativo = gs.rechazoSignificativo.indexOf(code)>=0;
+  const esPuente = gs.puentes.indexOf(code)>=0;
+  const aislamientoMencionado = st.aislamiento > 0;
+
+  let bullets = [];
+  bullets.push(`Recibe ${st.positivas} elección(es) positiva(s) en total (de las cuales ${st.reciprocas} son recíprocas), frente a una media de ${gs.avgPositivas} en el grupo.`);
+  bullets.push(`Recibe ${st.negativas} elección(es) negativa(s), frente a una media de ${gs.avgNegativas} en el grupo.`);
+  if(st.confianza>0 || st.ayuda>0 || st.lider>0){
+    bullets.push(`Ha sido mencionado/a como persona de confianza ${st.confianza} vez/veces, como alguien que ayuda ${st.ayuda} vez/veces, y como referente positivo o liderazgo ${st.lider} vez/veces.`);
+  }
+  if(bajaIntegracion){
+    bullets.push(`El número de elecciones positivas recibidas es bajo en comparación con el resto del grupo. Los datos sugieren una posible situación de baja integración; conviene contrastarlo con la observación directa en el aula antes de sacar conclusiones.`);
+  }
+  if(rechazoSignificativo){
+    bullets.push(`Ha recibido más menciones negativas de lo habitual dentro de este grupo. Se recomienda revisar este caso con prudencia: el dato por sí solo no demuestra ninguna situación de acoso ni conflicto grave, pero conviene un seguimiento.`);
+  }
+  if(aislamientoMencionado){
+    bullets.push(`${st.aislamiento} compañero(s) han señalado, al preguntarles por el grupo, una posible situación de aislamiento relacionada con este alumno/a. No existen datos suficientes para concluir nada por sí solo; se recomienda contrastarlo en tutoría.`);
+  }
+  if(esLider){
+    bullets.push(`Aparece con frecuencia como referente de influencia positiva en el grupo.`);
+  }
+  if(esPuente){
+    bullets.push(`Sus elecciones positivas conectan a más de un subgrupo dentro de la clase; podría actuar como puente entre compañeros que de otro modo no se relacionan tanto.`);
+  }
+  if(!bajaIntegracion && !rechazoSignificativo && !aislamientoMencionado){
+    bullets.push(`No se identifican, con los datos actuales, señales que sugieran una necesidad de intervención específica.`);
   }
 
-  function bindComparar(){
-    const sc = document.getElementById('selCompararCurso');
-    if(!sc) return;
-    const sg = document.getElementById('selCompararGrupo');
-    function gruposDisponibles(c){ return gruposList(c).filter(g => !(c===curso && g===grupo)); }
-    if(comparar.curso) sg.innerHTML = '<option value="">grupo…</option>' + gruposDisponibles(comparar.curso).map(g=>`<option value="${g}" ${g===comparar.grupo?'selected':''}>${data[comparar.curso].grupos[g].nombre}</option>`).join('');
-    sc.onchange = ()=>{
-      comparar.curso = sc.value || null; comparar.grupo = null;
-      sg.innerHTML = '<option value="">grupo…</option>' + gruposDisponibles(comparar.curso).map(g=>`<option value="${g}">${data[comparar.curso].grupos[g].nombre}</option>`).join('');
-      drawChart();
-    };
-    sg.onchange = ()=>{ comparar.grupo = sg.value || null; drawChart(); };
+  let acciones = [];
+  if(bajaIntegracion || aislamientoMencionado){
+    acciones.push('Entrevista individual breve para conocer cómo vive la relación con el grupo.');
+    acciones.push('Actividades de aprendizaje cooperativo con reagrupamientos puntuales.');
+    acciones.push('Valorar un programa de alumnado ayudante o mediación entre iguales.');
+  }
+  if(rechazoSignificativo){
+    acciones.push('Observación discreta en momentos de trabajo en grupo o recreo.');
+    acciones.push('Entrevista individual, con enfoque no acusatorio, para contextualizar el dato.');
+  }
+  if(esLider){
+    acciones.push('Aprovechar su influencia positiva como apoyo en dinámicas de cohesión grupal (con su acuerdo).');
+  }
+  if(acciones.length===0){
+    acciones.push('Seguimiento ordinario, sin actuación específica adicional por ahora.');
   }
 
-  function viewAlertas(){
-    let rows = [];
-    for(const c of cursosList()){
-      for(const g of gruposList(c)){
-        const gd = data[c].grupos[g];
-        Object.entries(gd.rondas||{}).forEach(([id,r])=>{
-          const m = avgRonda(r);
-          if((m.p7||0) >= 4) rows.push({curso:c, grupo:gd.nombre, ronda:r.titulo, valor:m.p7, n:m._n});
-        });
-      }
+  return `
+  <div style="margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:14px; background:#FCFBF8;">
+    <h3 style="margin-top:0;">${esc(s.code)} — ${esc(s.name)}</h3>
+    <ul class="tight">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <h3>Posibles actuaciones de tutoría</h3>
+    <ul class="tight">${acciones.map(a=>`<li>${a}</li>`).join('')}</ul>
+    <p class="muted" style="margin-top:10px;">Esta ficha es una ayuda para la reflexión del profesorado, no un diagnóstico. Documento confidencial: no debe entregarse ni mostrarse al alumnado ni a las familias tal cual.</p>
+  </div>`;
+}
+
+function listOrNone(codes, codeToName, emptyMsg){
+  return `<ul class="tight">${codes.map(c=>`<li>${esc(c)} — ${esc(codeToName[c]||'')}</li>`).join('')}</ul>`;
+}
+
+function cohesionLabel(level){
+  if(level==='alto') return 'Alta';
+  if(level==='medio') return 'Media';
+  if(level==='bajo') return 'Baja';
+  return 'Sin datos';
+}
+
+function renderSociogramSVG(group, gs){
+  const students = group.students;
+  const n = students.length;
+  const W=680, H=560, cx=340, cy=280, R=Math.min(220, 40+ n*6);
+  const pos = {};
+  students.forEach((s,i)=>{
+    const angle = (2*Math.PI*i/Math.max(n,1)) - Math.PI/2;
+    pos[s.code] = { x: cx + R*Math.cos(angle), y: cy + R*Math.sin(angle) };
+  });
+  const reciprocalSet = new Set(gs.reciprocalPairs.map(p=>[p[0],p[1]].sort().join('|')));
+
+  let edgesSvg = '';
+  gs.posEdges.forEach(edge=>{
+    const parts = edge.split('|'); const a=parts[0], b=parts[1];
+    const key = [a,b].sort().join('|');
+    if(reciprocalSet.has(key)) return; // draw once below as reciprocal
+    if(!pos[a] || !pos[b]) return;
+    edgesSvg += `<line x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}" stroke="var(--sage)" stroke-width="1.4" marker-end="url(#arrowPos)" opacity="0.8"/>`;
+  });
+  reciprocalSet.forEach(key=>{
+    const parts = key.split('|'); const a=parts[0], b=parts[1];
+    if(!pos[a] || !pos[b]) return;
+    edgesSvg += `<line x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}" stroke="var(--ink)" stroke-width="2.4" opacity="0.85"/>`;
+  });
+  gs.negEdges.forEach(edge=>{
+    const parts = edge.split('|'); const a=parts[0], b=parts[1];
+    if(!pos[a] || !pos[b]) return;
+    edgesSvg += `<line x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}" stroke="var(--clay)" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrowNeg)" opacity="0.6"/>`;
+  });
+
+  let nodesSvg = '';
+  students.forEach(s=>{
+    const st = gs.stats[s.code];
+    const p = pos[s.code];
+    const radius = 13 + Math.min(st.positivas*2, 16);
+    let fill = '#FFFFFF';
+    let stroke = 'var(--ink-soft)';
+    let strokeW = 1.5;
+    let dash = '';
+    if(gs.leaders.indexOf(s.code)>=0){ fill = 'var(--gold)'; stroke='#8a6a1e'; }
+    if(gs.rechazoSignificativo.indexOf(s.code)>=0){ stroke = 'var(--clay)'; strokeW=2.6; }
+    if(gs.bajaIntegracion.indexOf(s.code)>=0){ dash='4,3'; stroke='var(--ink-soft)'; }
+    nodesSvg += `<circle cx="${p.x}" cy="${p.y}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" stroke-dasharray="${dash}"/>`;
+    nodesSvg += `<text x="${p.x}" y="${p.y+radius+13}" text-anchor="middle" font-size="10.5" fill="var(--ink)">${esc(s.code)}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:680px; display:block; margin:0 auto;">
+    <defs>
+      <marker id="arrowPos" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--sage)"/></marker>
+      <marker id="arrowNeg" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--clay)"/></marker>
+    </defs>
+    ${edgesSvg}
+    ${nodesSvg}
+  </svg>`;
+}
+
+function renderGlobalComparison(){
+  const groups = state.config.groups;
+  const rows = groups.map(g=>{
+    const responses = state.responsesCache[g.id] || [];
+    const gs = computeGroupStats(g, responses);
+    return {g, gs};
+  });
+
+  let html = `<div class="panel">
+    <h2>Comparativa entre grupos</h2>
+    ${rows.length===0 ? '<p class="empty">No hay grupos todavía.</p>' : `
+    <table>
+      <thead><tr>
+        <th>Curso y grupo</th><th>Alumnado</th><th>Participación</th><th>Cohesión</th><th>Clima medio</th>
+        <th>Recíprocas</th><th>Líderes+</th><th>Baja integr.</th><th>Rechazo signif.</th><th>Subgrupos</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(({g,gs})=>`<tr>
+          <td>${esc(g.curso)} ${esc(g.grupo)}</td>
+          <td>${g.students.length}</td>
+          <td>${gs.participation}%</td>
+          <td>${cohesionLabel(gs.cohesionLevel)}</td>
+          <td>${gs.avgClima===null?'—':gs.avgClima}</td>
+          <td>${gs.reciprocalPairs.length}</td>
+          <td>${gs.leaders.length}</td>
+          <td>${gs.bajaIntegracion.length}</td>
+          <td>${gs.rechazoSignificativo.length}</td>
+          <td>${gs.subgroups.length}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
+  html += renderSynthesis(rows);
+  html += renderDisclaimer();
+  return html;
+}
+
+function renderSynthesis(rows){
+  const withData = rows.filter(r=> r.gs.respondentCount>0 && r.gs.participation>=50);
+  if(withData.length===0){
+    return `<div class="panel"><h2>Síntesis global</h2><p class="muted">No hay datos suficientes (con al menos un 50% de participación) para elaborar una síntesis comparativa fiable todavía.</p></div>`;
+  }
+  const eso = withData.filter(r=> etapaOf(r.g.curso)==='ESO');
+  const bach = withData.filter(r=> etapaOf(r.g.curso)==='BACH');
+
+  let bullets = [];
+
+  const cohesionOrder = {alto:3, medio:2, bajo:1, 'sin datos':0};
+  const sorted = [...withData].sort((a,b)=> cohesionOrder[b.gs.cohesionLevel]-cohesionOrder[a.gs.cohesionLevel]);
+  if(sorted.length>0){
+    const top = sorted[0];
+    bullets.push(`Los datos sugieren que <strong>${esc(top.g.curso)} ${esc(top.g.grupo)}</strong> presenta el nivel de cohesión más alto entre los grupos con participación suficiente.`);
+    const bottom = sorted[sorted.length-1];
+    if(bottom.g.id !== top.g.id){
+      bullets.push(`<strong>${esc(bottom.g.curso)} ${esc(bottom.g.grupo)}</strong> es el grupo que, según los datos disponibles, podría necesitar más atención tutorial en materia de cohesión y convivencia.`);
     }
-    if(!rows.length) return `<h2>Alertas</h2><div class="empty">No hay rondas con señal de posible aislamiento/acoso (P.7 ≥ 4) registradas.</div>`;
-    const body = rows.map(r=>`<tr><td>${r.curso}</td><td>${r.grupo}</td><td>${r.ronda}</td><td style="color:var(--coral);font-weight:600;">${fmt(r.valor)}</td><td>${r.n} respuestas</td></tr>`).join('');
-    return `<h2>Alertas — todos los cursos</h2>
-    <div class="subtitle">Rondas donde la pregunta discreta obtuvo una media ≥ 4. Revisa aunque el resto del grupo vaya bien.</div>
-    <div class="card"><table><tr><th>Curso</th><th>Grupo</th><th>Ronda</th><th>P.7</th><th>Respuestas</th></tr>${body}</table></div>`;
   }
 
-  function render(){
-    if(!curso){ document.getElementById('main').innerHTML = `<h2>Bienvenido</h2><div class="empty">Crea tu primer curso académico en el panel lateral para empezar.</div>`; return; }
-    refreshSelectors();
-    document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
-    const main = document.getElementById('main');
-    if(view==='resumen') main.innerHTML = viewResumen();
-    else if(view==='alumnado') main.innerHTML = viewAlumnado();
-    else if(view==='rondas') main.innerHTML = viewRondas();
-    else if(view==='semaforo') main.innerHTML = viewSemaforo();
-    else if(view==='evolucion'){ main.innerHTML = viewEvolucion(); setTimeout(drawChart,0); bindComparar(); }
-    else if(view==='alertas') main.innerHTML = viewAlertas();
+  if(eso.length>0 && bach.length>0){
+    const avgCohEso = avg(eso.map(r=>r.gs.cohesionRatio));
+    const avgCohBach = avg(bach.map(r=>r.gs.cohesionRatio));
+    const avgClimaEso = avg(eso.filter(r=>r.gs.avgClima!==null).map(r=>r.gs.avgClima));
+    const avgClimaBach = avg(bach.filter(r=>r.gs.avgClima!==null).map(r=>r.gs.avgClima));
+    if(avgCohBach > avgCohEso){
+      bullets.push(`Los grupos de Bachillerato muestran, en conjunto, una proporción de relaciones recíprocas algo mayor que los de ESO (${avgCohBach} frente a ${avgCohEso}); conviene contrastarlo con más cursos antes de generalizar.`);
+    } else if(avgCohEso > avgCohBach){
+      bullets.push(`Los grupos de ESO muestran, en conjunto, una proporción de relaciones recíprocas algo mayor que los de Bachillerato (${avgCohEso} frente a ${avgCohBach}); conviene contrastarlo con más cursos antes de generalizar.`);
+    } else {
+      bullets.push(`No se observan diferencias claras en cohesión entre ESO y Bachillerato con los datos actuales.`);
+    }
+    bullets.push(`El clima medio declarado es de ${avgClimaEso===0?'—':avgClimaEso} en ESO y de ${avgClimaBach===0?'—':avgClimaBach} en Bachillerato.`);
+  } else {
+    bullets.push(`No existen datos suficientes de ambas etapas (ESO y Bachillerato) para compararlas entre sí todavía.`);
   }
 
-  const semTemp = {};
-  window.climaApp = {
-    addAlumno(){
-      const inp = document.getElementById('nuevoAlumno');
-      const v = inp.value.trim();
-      if(!v) return;
-      db.ref(`${gPath()}/alumnos`).push(v).then(()=> toast('Alumno/a añadido/a'));
-    },
-    delAlumno(id){ db.ref(`${gPath()}/alumnos/${id}`).remove().then(()=> toast('Eliminado')); },
-    crearRonda(){
-      const inp = document.getElementById('inputRonda');
-      const t = inp.value.trim();
-      if(!t){ toast('Escribe un nombre para la ronda'); return; }
-      db.ref(`${gPath()}/rondas`).push({titulo:t, fecha:new Date().toISOString().slice(0,10), activa:true})
-        .then(()=>{ inp.value=''; toast('Ronda creada y abierta'); });
-    },
-    cerrarRonda(id){ db.ref(`${gPath()}/rondas/${id}/activa`).set(false).then(()=> toast('Ronda cerrada')); },
-    abrirRonda(id){ db.ref(`${gPath()}/rondas/${id}/activa`).set(true).then(()=> toast('Ronda reabierta')); },
-    delRonda(id){ db.ref(`${gPath()}/rondas/${id}`).remove().then(()=> toast('Ronda eliminada')); },
-    copiarLink(){
-      const inp = document.getElementById('linkAlumno');
-      inp.select(); document.execCommand('copy');
-      toast('Enlace copiado');
-    },
-    setTile(campo,val){
-      semTemp[campo]=val;
-      const box = document.getElementById('tile_'+campo);
-      box.querySelectorAll('.tile').forEach(t=>{
-        t.classList.remove('sel-green','sel-amber','sel-red');
-        if(t.dataset.val===val) t.classList.add(val==='verde'?'sel-green':val==='amarillo'?'sel-amber':'sel-red');
-      });
-    },
-    guardarSemaforo(){
-      const fecha = document.getElementById('fechaSemaforo').value;
-      const rec = {fecha, relacion:semTemp.relacion||null, bienestar:semTemp.bienestar||null, participacion:semTemp.participacion||null};
-      db.ref(`${gPath()}/semaforos`).push(rec).then(()=>{ toast('Semáforo guardado'); Object.keys(semTemp).forEach(k=>delete semTemp[k]); });
-    },
-    delSemaforo(id){ db.ref(`${gPath()}/semaforos/${id}`).remove().then(()=> toast('Eliminado')); },
-    quitarComparacion(){ comparar={curso:null,grupo:null}; render(); },
-  };
+  const totalRechazo = withData.reduce((a,r)=>a+r.gs.rechazoSignificativo.length,0);
+  const totalBaja = withData.reduce((a,r)=>a+r.gs.bajaIntegracion.length,0);
+  bullets.push(`En conjunto, se han identificado ${totalBaja} caso(s) de posible baja integración y ${totalRechazo} caso(s) de posible rechazo significativo en los grupos con datos suficientes. Estas cifras son una señal para el seguimiento tutorial, no un diagnóstico.`);
 
-  document.getElementById('nav').addEventListener('click', e=>{
-    const b = e.target.closest('button[data-view]');
-    if(!b) return;
-    view = b.dataset.view; render();
+  return `<div class="panel">
+    <h2>Síntesis global</h2>
+    <ul class="tight">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <p class="muted">Basado únicamente en los grupos con al menos un 50% de participación (${withData.length} de ${rows.length} grupos).</p>
+  </div>`;
+}
+
+function renderDisclaimer(){
+  return `<div class="disclaimer">
+    Recuerda: el sociograma refleja las relaciones del grupo en un momento determinado y no debe utilizarse como único instrumento de valoración. Debe contrastarse con la observación del profesorado, entrevistas y tutorías. No demuestra por sí solo la existencia de acoso escolar. Trata esta información de forma confidencial y no la difundas entre el alumnado ni las familias con datos identificativos.
+  </div>`;
+}
+
+/* ============ CSV EXPORT ============ */
+function exportAllCsv(){
+  const groups = state.config.groups;
+  let lines = [['grupo_id','curso','grupo','codigo_alumno','positivas_recibidas','negativas_recibidas','reciprocas','confianza','ayuda','liderazgo','menciones_aislamiento','elecciones_emitidas','participacion_grupo_pct','clima_medio_grupo','cohesion_grupo'].join(';')];
+  groups.forEach(g=>{
+    const responses = state.responsesCache[g.id] || [];
+    const gs = computeGroupStats(g, responses);
+    g.students.forEach(s=>{
+      const st = gs.stats[s.code];
+      lines.push([g.id, g.curso, g.grupo, s.code, st.positivas, st.negativas, st.reciprocas, st.confianza, st.ayuda, st.lider, st.aislamiento, st.emitidas, gs.participation, gs.avgClima===null?'':gs.avgClima, gs.cohesionLevel].join(';'));
+    });
   });
-  document.getElementById('selCurso').addEventListener('change', e=>{ curso=e.target.value; grupo=null; comparar={curso:null,grupo:null}; render(); });
-  document.getElementById('selGrupo').addEventListener('change', e=>{ grupo=e.target.value; comparar={curso:null,grupo:null}; render(); });
-  document.getElementById('btnNuevoCurso').addEventListener('click', ()=>{
-    const inp = document.getElementById('inputNuevoCurso');
-    const c = inp.value.trim();
-    if(!c){ toast('Escribe primero el nombre del curso'); return; }
-    db.ref(`cursos/${c}/creado`).set(true).then(()=>{ curso=c; grupo=null; inp.value=''; toast('Curso creado: '+c); });
-  });
-  document.getElementById('btnNuevoGrupo').addEventListener('click', ()=>{
-    if(!curso){ toast('Crea primero un curso académico.'); return; }
-    const inp = document.getElementById('inputNuevoGrupo');
-    const g = inp.value.trim();
-    if(!g){ toast('Escribe primero el nombre del grupo'); return; }
-    db.ref(`cursos/${curso}/grupos/${g}/nombre`).set(g).then(()=>{ grupo=g; inp.value=''; toast('Grupo creado: '+g); });
-  });
-})();
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'sociograma_export.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ============ ACTIONS ============ */
+const actions = {
+  gotoTab(arg){ state.tab = arg; if(arg==='cuestionario'){ state.formStep='select'; } render(); if(arg==='analisis' && state.teacherUnlocked){ ensureResponsesLoadedAll(); } },
+  async teacherLogin(){
+    const emailEl = document.getElementById('teacherEmail');
+    const passEl = document.getElementById('teacherPassword');
+    if(!emailEl || !passEl) return;
+    const email = emailEl.value.trim();
+    const password = passEl.value;
+    if(!email || !password){ toast('Escribe tu correo y contraseña'); return; }
+    state.lastEmail = email;
+    const r = await withTimeout(auth.signInWithEmailAndPassword(email, password), 8000);
+    if(r.timedOut){ toast('El inicio de sesión tardó demasiado, inténtalo de nuevo'); return; }
+    if(r.error){
+      const code = r.error.code || '';
+      let msg = 'No se pudo iniciar sesión.';
+      if(code.indexOf('wrong-password')>=0 || code.indexOf('invalid-credential')>=0) msg = 'Contraseña incorrecta.';
+      else if(code.indexOf('user-not-found')>=0) msg = 'No existe ese usuario en Firebase Authentication.';
+      else if(code.indexOf('invalid-email')>=0) msg = 'Correo no válido.';
+      else if(code.indexOf('too-many-requests')>=0) msg = 'Demasiados intentos. Espera un momento.';
+      toast(msg);
+      return;
+    }
+    state.teacherUnlocked = true;
+    if(state.tab==='analisis') ensureResponsesLoadedAll();
+    render();
+  },
+  async teacherLogout(){
+    state.teacherUnlocked = false;
+    state.tab = 'inicio';
+    try{ await auth.signOut(); }catch(e){}
+    await ensureAnonAuth();
+    render();
+  },
+  onChangeGroup(){
+    const el = document.getElementById('selGroup');
+    state.form.groupId = el.value || null;
+    state.form.studentCode = null;
+    render();
+  },
+  onChangeStudent(){
+    const el = document.getElementById('selStudent');
+    state.form.studentCode = el.value || null;
+    render();
+  },
+  startQuestionnaire(){
+    if(!state.form.studentCode) return;
+    state.form = Object.assign(state.form, {q1:[], q2:[], q3:'', q4:'', q5:'', q6:[], q7:[], q7none:false, q8:'', q9:null, q10:''});
+    state.formStep = 'answer';
+    render();
+  },
+  cancelForm(){
+    state.formStep = 'select';
+    render();
+  },
+  restartForm(){
+    state.form = {groupId:null, studentCode:null, q1:[], q2:[], q3:'', q4:'', q5:'', q6:[], q7:[], q7none:false, q8:'', q9:null, q10:''};
+    state.formStep = 'select';
+    render();
+  },
+  togglePick(arg, el){
+    const parts = arg.split('|'); const name=parts[0], code=parts[1];
+    const list = state.form[name];
+    const max = parseInt(el.closest('.pick-list').dataset.max, 10);
+    const idx = list.indexOf(code);
+    if(el.checked){
+      if(idx<0){
+        if(list.length>=max){ el.checked=false; toast('Máximo '+max+' seleccionados'); return; }
+        list.push(code);
+      }
+    } else {
+      if(idx>=0) list.splice(idx,1);
+    }
+    const counter = document.getElementById('count_'+name);
+    if(counter) counter.textContent = list.length;
+  },
+  toggleNone(arg, el){
+    state.form.q7none = el.checked;
+    if(el.checked) state.form.q7 = [];
+    render();
+  },
+  setSingle(arg, el){
+    state.form[arg] = el.value;
+  },
+  setClima(arg){
+    state.form.q9 = parseInt(arg,10);
+  },
+  setText(arg, el){
+    state.form.q10 = el.value;
+  },
+  async submitQuestionnaire(){
+    const f = state.form;
+    const g = state.config.groups.find(x=>x.id===f.groupId);
+    if(!g) return;
+    if(f.q1.length===0){ toast('Responde a la pregunta 1'); return; }
+    if(f.q2.length===0){ toast('Responde a la pregunta 2'); return; }
+    if(!f.q3){ toast('Responde a la pregunta 3'); return; }
+    if(!f.q4){ toast('Responde a la pregunta 4'); return; }
+    if(!f.q5){ toast('Responde a la pregunta 5'); return; }
+    if(!f.q8){ toast('Responde a la pregunta 8'); return; }
+    if(!f.q9){ toast('Valora el ambiente de la clase'); return; }
+
+    const responseObj = {
+      studentCode: f.studentCode,
+      timestamp: new Date().toISOString(),
+      q1: f.q1, q2: f.q2, q3: f.q3, q4: f.q4, q5: f.q5, q6: f.q6, q7: f.q7none? [] : f.q7, q8: f.q8, q9: f.q9, q10: f.q10
+    };
+    const ok = await saveOneResponse(g.id, f.studentCode, responseObj);
+    if(!ok){ toast('No se pudo guardar. Vuelve a intentarlo.'); return; }
+    if(!state.responsesCache[g.id]) state.responsesCache[g.id] = [];
+    state.responsesCache[g.id] = state.responsesCache[g.id].filter(r=>r.studentCode!==f.studentCode);
+    state.responsesCache[g.id].push(responseObj);
+    state.formStep = 'done';
+    render();
+  },
+  toggleGroupOpen(arg){
+    state['open_'+arg] = !state['open_'+arg];
+    render();
+  },
+  deleteGroup(arg){
+    state.confirmingGroup = arg;
+    render();
+  },
+  cancelDeleteGroup(){
+    state.confirmingGroup = null;
+    render();
+  },
+  async confirmDeleteGroup(arg){
+    state.config.groups = state.config.groups.filter(g=>g.id!==arg);
+    state.confirmingGroup = null;
+    render();
+    saveConfig(state.config);
+    fbRemove('responses/'+arg);
+  },
+  async addStudents(arg){
+    const ta = document.getElementById('bulkNames_'+arg);
+    if(!ta) return;
+    const names = ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(names.length===0) return;
+    const g = state.config.groups.find(x=>x.id===arg);
+    if(!g) return;
+    const prefix = abbrevCurso(g.curso) + g.grupo.toUpperCase();
+    let nextIndex = g.students.length + 1;
+    names.forEach(name=>{
+      const code = prefix + '-' + String(nextIndex).padStart(2,'0');
+      g.students.push({code, name});
+      nextIndex++;
+    });
+    ta.value = '';
+    render();
+    toast(names.length + ' alumno/a(s) añadido/s');
+    saveConfig(state.config);
+  },
+  deleteStudent(arg){
+    state.confirmingStudent = arg;
+    render();
+  },
+  cancelDeleteStudent(){
+    state.confirmingStudent = null;
+    render();
+  },
+  async confirmDeleteStudent(arg){
+    const parts = arg.split('|'); const groupId=parts[0], code=parts[1];
+    const g = state.config.groups.find(x=>x.id===groupId);
+    if(!g) return;
+    g.students = g.students.filter(s=>s.code!==code);
+    state.confirmingStudent = null;
+    render();
+    saveConfig(state.config);
+    fbRemove('responses/'+groupId+'/'+code);
+  },
+  setAnalysisGroup(){
+    const el = document.getElementById('analysisGroupSelect');
+    state.analysisGroupId = el.value;
+    state.studentReportCode = null;
+    ensureResponsesLoadedAll();
+    render();
+  },
+  setStudentReport(){
+    const el = document.getElementById('studentReportSelect');
+    state.studentReportCode = el.value || null;
+    render();
+  },
+  async refreshAnalysis(){
+    await ensureResponsesLoadedAll(true);
+    toast('Datos actualizados');
+    render();
+  },
+  exportAllCsv(){
+    exportAllCsv();
+  },
+};
+
+async function ensureResponsesLoadedAll(force){
+  const groups = state.config.groups;
+  for(const g of groups){
+    if(force || !state.responsesCache[g.id]){
+      state.responsesCache[g.id] = await loadResponses(g.id);
+    }
+  }
+}
+
+/* ============ FORM SUBMISSIONS ============ */
+async function handleFormSubmit(form){
+  if(form.dataset.form === 'addGroup'){
+    const curso = form.elements.curso.value;
+    const grupo = form.elements.grupo.value.trim().toUpperCase();
+    if(!grupo){ toast('Escribe la letra del grupo (por ejemplo, A)'); return; }
+    const exists = state.config.groups.some(g=>g.curso===curso && g.grupo===grupo);
+    if(exists){ toast('Ese grupo ya existe'); return; }
+    state.config.groups.push({ id: uid(), curso, grupo, students: [] });
+    state.config.groups.sort((a,b)=> cursoIndex(a.curso)-cursoIndex(b.curso) || a.grupo.localeCompare(b.grupo));
+    render();
+    toast('Grupo creado');
+    saveConfig(state.config);
+  }
+}
+
+/* ============ EVENT DELEGATION ============ */
+document.getElementById('app').addEventListener('click', (e)=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const act = el.dataset.act;
+  const arg = el.dataset.arg;
+  if(actions[act]) actions[act](arg, el);
+});
+document.getElementById('app').addEventListener('change', (e)=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const act = el.dataset.act;
+  const arg = el.dataset.arg;
+  if(actions[act]) actions[act](arg, el);
+});
+document.getElementById('app').addEventListener('submit', (e)=>{
+  const form = e.target.closest('form[data-form]');
+  if(!form) return;
+  e.preventDefault();
+  handleFormSubmit(form);
+});
+document.getElementById('tabs').addEventListener('click', (e)=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const act = el.dataset.act;
+  const arg = el.dataset.arg;
+  if(actions[act]) actions[act](arg, el);
+});
+
+init();
+</script>
+</body>
+</html>
