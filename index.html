@@ -330,19 +330,24 @@ async function fbRemove(path){
     return true;
   }catch(e){ showErrorBanner('Error eliminando "'+path+'": ' + e.message); return false; }
 }
+function toCleanArray(v){
+  // Firebase puede devolver una lista como array normal, como objeto {0:.., 2:..} si hay huecos,
+  // o puede faltar directamente. Esto lo normaliza todo a un array limpio sin huecos ni nulos.
+  if(Array.isArray(v)) return v.filter(x=> x!==null && x!==undefined);
+  if(v && typeof v === 'object') return Object.values(v).filter(x=> x!==null && x!==undefined);
+  return [];
+}
 function normalizeConfig(cfg){
-  // Firebase Realtime Database elimina los campos de arrays vacíos (p.ej. students: []),
-  // así que al leer hay que reconstruirlos para que el resto del código pueda confiar en que siempre son arrays.
-  if(!cfg || !Array.isArray(cfg.groups)){
-    return {groups: Array.isArray(cfg && cfg.groups) ? cfg.groups : []};
-  }
+  const groupsArr = toCleanArray(cfg && cfg.groups);
   return {
-    groups: cfg.groups.map(g=>({
-      id: g.id,
-      curso: g.curso,
-      grupo: g.grupo,
-      students: Array.isArray(g.students) ? g.students : []
-    }))
+    groups: groupsArr
+      .filter(g=> g && typeof g === 'object')
+      .map(g=>({
+        id: g.id,
+        curso: g.curso,
+        grupo: g.grupo,
+        students: toCleanArray(g.students).filter(s=> s && typeof s === 'object')
+      }))
   };
 }
 async function loadConfig(){
@@ -457,11 +462,16 @@ function renderTabs(){
 function render(){
   renderTabs();
   const app = document.getElementById('app');
-  if(state.loading){ app.innerHTML = '<div class="empty">Cargando…</div>'; return; }
-  if(state.tab==='inicio') app.innerHTML = renderInicio();
-  else if(state.tab==='cuestionario') app.innerHTML = renderCuestionario();
-  else if(state.tab==='config') app.innerHTML = state.teacherUnlocked ? renderConfig() : renderGate('config');
-  else if(state.tab==='analisis') app.innerHTML = state.teacherUnlocked ? renderAnalisis() : renderGate('analisis');
+  try{
+    if(state.loading){ app.innerHTML = '<div class="empty">Cargando…</div>'; return; }
+    if(state.tab==='inicio') app.innerHTML = renderInicio();
+    else if(state.tab==='cuestionario') app.innerHTML = renderCuestionario();
+    else if(state.tab==='config') app.innerHTML = state.teacherUnlocked ? renderConfig() : renderGate('config');
+    else if(state.tab==='analisis') app.innerHTML = state.teacherUnlocked ? renderAnalisis() : renderGate('analisis');
+  }catch(err){
+    showErrorBanner('Fallo al dibujar la pantalla: ' + err.message);
+    app.innerHTML = '<div class="panel"><p>Ha ocurrido un error al mostrar esta pantalla. Copia el mensaje rojo de arriba y compártelo. Mientras tanto, prueba a pulsar otra pestaña.</p></div>';
+  }
 }
 
 /* ============ GATE ============ */
