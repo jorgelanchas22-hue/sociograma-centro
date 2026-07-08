@@ -330,15 +330,40 @@ async function fbRemove(path){
     return true;
   }catch(e){ showErrorBanner('Error eliminando "'+path+'": ' + e.message); return false; }
 }
+function normalizeConfig(cfg){
+  // Firebase Realtime Database elimina los campos de arrays vacíos (p.ej. students: []),
+  // así que al leer hay que reconstruirlos para que el resto del código pueda confiar en que siempre son arrays.
+  if(!cfg || !Array.isArray(cfg.groups)){
+    return {groups: Array.isArray(cfg && cfg.groups) ? cfg.groups : []};
+  }
+  return {
+    groups: cfg.groups.map(g=>({
+      id: g.id,
+      curso: g.curso,
+      grupo: g.grupo,
+      students: Array.isArray(g.students) ? g.students : []
+    }))
+  };
+}
 async function loadConfig(){
   const val = await fbGet('config');
-  return val || {groups:[]};
+  return normalizeConfig(val);
 }
 async function saveConfig(cfg){ return fbSet('config', cfg); }
 async function loadResponses(groupId){
   // Devuelve un array de respuestas a partir del objeto {codigoAlumno: respuesta} de Firebase.
   const val = await fbGet('responses/'+groupId);
-  return val ? Object.values(val) : [];
+  if(!val) return [];
+  return Object.values(val).map(r=>({
+    studentCode: r.studentCode,
+    timestamp: r.timestamp,
+    q1: Array.isArray(r.q1)?r.q1:[],
+    q2: Array.isArray(r.q2)?r.q2:[],
+    q3: r.q3||'', q4: r.q4||'', q5: r.q5||'',
+    q6: Array.isArray(r.q6)?r.q6:[],
+    q7: Array.isArray(r.q7)?r.q7:[],
+    q8: r.q8||'', q9: r.q9, q10: r.q10||''
+  }));
 }
 async function saveOneResponse(groupId, studentCode, responseObj){
   return fbSet('responses/'+groupId+'/'+studentCode, responseObj);
